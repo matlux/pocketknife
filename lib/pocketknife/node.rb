@@ -188,8 +188,17 @@ cd /root &&
     def self.prepare_upload(&block)
       begin
         # TODO either do this in memory or scope this to the PID to allow concurrency
+        puts("TMP_SOLO_RB=#{TMP_SOLO_RB} contains=#{SOLO_RB_CONTENT}")
         TMP_SOLO_RB.open("w") {|h| h.write(SOLO_RB_CONTENT)}
+        puts("TMP_CHEF_SOLO_APPLY=#{TMP_CHEF_SOLO_APPLY} contains=#{CHEF_SOLO_APPLY_CONTENT}")
         TMP_CHEF_SOLO_APPLY.open("w") {|h| h.write(CHEF_SOLO_APPLY_CONTENT)}
+        puts("TMP_TARBALL=#{TMP_TARBALL} contains following files:")
+        puts("VAR_POCKETKNIFE_COOKBOOKS=#{VAR_POCKETKNIFE_COOKBOOKS}")
+        puts("VAR_POCKETKNIFE_SITE_COOKBOOKS=#{VAR_POCKETKNIFE_SITE_COOKBOOKS}")
+        puts("VAR_POCKETKNIFE_ROLES=#{VAR_POCKETKNIFE_ROLES}")
+        puts("TMP_SOLO_RB=#{TMP_SOLO_RB}")
+        
+        
         TMP_TARBALL.open("w") do |handle|
           Archive::Tar::Minitar.pack(
             [
@@ -224,6 +233,7 @@ cd /root &&
         TMP_SOLO_RB,
         TMP_CHEF_SOLO_APPLY
       ].each do |path|
+      	puts "delete #{path}"
         path.unlink if path.exist?
       end
     end
@@ -241,7 +251,8 @@ umask 0377 &&
   mkdir -p "#{ETC_CHEF}" "#{VAR_POCKETKNIFE}" "#{VAR_POCKETKNIFE_CACHE}" "#{CHEF_SOLO_APPLY.dirname}"
       HERE
 
-      self.say("Uploading new files...", false)
+      self.say("Uploading new files... from #{self.local_node_json_pathname.to_s} to #{NODE_JSON.to_s}", false)
+      self.say("and from #{TMP_TARBALL.to_s} to #{VAR_POCKETKNIFE_TARBALL.to_s}", false)
       self.connection.file_upload(self.local_node_json_pathname.to_s, NODE_JSON.to_s)
       self.connection.file_upload(TMP_TARBALL.to_s, VAR_POCKETKNIFE_TARBALL.to_s)
 

@@ -98,6 +98,7 @@ OPTIONS:
 
       begin
         arguments = parser.parse!
+        puts "arguments=#{arguments} options=#{options}"
       rescue OptionParser::MissingArgument => e
         puts parser
         puts
@@ -115,15 +116,19 @@ OPTIONS:
       end
 
       begin
+      	puts "options=#{options}"
         if options[:upload]
+          puts "upload"
           pocketknife.upload(nodes)
         end
 
         if options[:apply]
+          puts "apply"
           pocketknife.apply(nodes)
         end
 
         if not options[:upload] and not options[:apply]
+          puts "deploy"
           pocketknife.deploy(nodes)
         end
       rescue NodeError => e
@@ -154,6 +159,7 @@ OPTIONS:
   # @option [Boolean] verbosity Amount of detail to display. +true+ means verbose, +nil+ means normal, +false+ means quiet.
   # @option [Boolean] install Install Chef and its dependencies if needed? +true+ means do so automatically, +false+ means don't, and +nil+ means display a prompt to ask the user what to do.
   def initialize(opts={})
+    puts "opts=#{opts}"
     self.verbosity   = opts[:verbosity]
     self.can_install = opts[:install]
 
