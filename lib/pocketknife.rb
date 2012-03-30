@@ -79,12 +79,22 @@ OPTIONS:
       parser.on("-q", "--quiet", "Display minimal status information") do |v|
         pocketknife.verbosity = false
       end
+      
+      parser.on("-u", "--user USER", "Run under non-root users and will not try to sudo. The user needs to have sufficient amount of right to do what it needs carrying out") do |name|
+        options[:user] = true
+        pocketknife.user = name
+      end
+      
+      parser.on("-k", "--sshkey SSHKEY", "Use an ssh key") do |name|
+        options[:ssh_key] = name
+        pocketknife.ssh_key = name
+      end
 
       parser.on("-u", "--upload", "Upload configuration, but don't apply it") do |v|
         options[:upload] = true
       end
 
-      parser.on("-a", "--apply", "Runs cheef to apply already-uploaded configuration") do |v|
+      parser.on("-a", "--apply", "Runs chef to apply already-uploaded configuration") do |v|
         options[:apply] = true
       end
 
@@ -147,6 +157,13 @@ OPTIONS:
 
   # Amount of detail to display? true means verbose, nil means normal, false means quiet.
   attr_accessor :verbosity
+  
+  # key for ssh access.
+  attr_accessor :ssh_key
+  
+  # user when not using root
+  attr_accessor :user
+
 
   # Can chef and its dependencies be installed automatically if not found? true means perform installation without prompting, false means quit if chef isn't available, and nil means prompt the user for input.
   attr_accessor :can_install
@@ -162,7 +179,7 @@ OPTIONS:
     puts "opts=#{opts}"
     self.verbosity   = opts[:verbosity]
     self.can_install = opts[:install]
-
+    self.user = "root"
     self.node_manager = NodeManager.new(self)
   end
 
@@ -225,11 +242,11 @@ OPTIONS:
   def deploy(nodes)
     node_manager.assert_known(nodes)
 
-    Node.prepare_upload do
+    #Node.prepare_upload do
       for node in nodes
         node_manager.find(node).deploy
       end
-    end
+    #end
   end
 
   # Uploads configuration information to remote nodes.
@@ -238,11 +255,11 @@ OPTIONS:
   def upload(nodes)
     node_manager.assert_known(nodes)
 
-    Node.prepare_upload do
+    #Node.prepare_upload do
       for node in nodes
         node_manager.find(node).upload
       end
-    end
+    #end
   end
 
   # Applies configurations to remote nodes.
