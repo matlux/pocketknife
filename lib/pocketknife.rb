@@ -1,6 +1,7 @@
 # Standard libraries
 require "pathname"
 require "fileutils"
+require "yaml"
 
 # Gem libraries
 require "archive/tar/minitar"
@@ -80,9 +81,18 @@ OPTIONS:
         pocketknife.verbosity = false
       end
       
-      parser.on("-u", "--user USER", "Run under non-root users and will not try to sudo. The user needs to have sufficient amount of right to do what it needs carrying out") do |name|
+      parser.on("-U", "--user USER", "Run under non-root users and will not try to sudo. The user needs to have sufficient amount of right to do what it needs to carrying out") do |name|
         options[:user] = true
         pocketknife.user = name
+      end
+      
+      parser.on("-p", "--password PASSWORD_FILE", "file that contains the password of the user (An alternative to using a key).") do |file|
+        options[:password] = true
+    	raise OptionParser::MissingArgument, "password requires a user" unless pocketknife.user
+        hash = YAML.load(File.read(file))
+        password = hash[pocketknife.user]
+        raise OptionParser::InvalidArgument, "#{file} does not have an entry for user #{pocketknife.user}." unless password
+        pocketknife.password = password
       end
       
       parser.on("-k", "--sshkey SSHKEY", "Use an ssh key") do |name|
@@ -110,6 +120,11 @@ OPTIONS:
         arguments = parser.parse!
         puts "arguments=#{arguments} options=#{options}"
       rescue OptionParser::MissingArgument => e
+        puts parser
+        puts
+        puts "ERROR: #{e}"
+        exit -1
+      rescue OptionParser::InvalidArgument => e
         puts parser
         puts
         puts "ERROR: #{e}"
@@ -163,6 +178,9 @@ OPTIONS:
   
   # user when not using root
   attr_accessor :user
+
+  # password when not using key
+  attr_accessor :password
 
 
   # Can chef and its dependencies be installed automatically if not found? true means perform installation without prompting, false means quit if chef isn't available, and nil means prompt the user for input.

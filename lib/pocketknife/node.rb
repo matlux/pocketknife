@@ -91,16 +91,23 @@ chef-solo -j #{@NODE_JSON} "$@"
       return self.connection_cache ||= begin
           #rye = Rye::Box.new(self.name, :user => "vr")
           user = "root"
-          if self.pocketknife.user != nil and self.pocketknife.user != ""
+          if self.pocketknife.user and self.pocketknife.user != ""
              user = self.pocketknife.user
+          end
+          options = {:user => user }
+          if self.pocketknife.password
+             puts "Connecting to.... #{self.name} as user #{user} with ssh key"
+             options[:password] = self.pocketknife.password
           end
           if self.pocketknife.ssh_key != nil and self.pocketknife.ssh_key != ""
              puts "Connecting to.... #{self.name} as user #{user} with ssh key"
-             rye = Rye::Box.new(self.name, {:user => user, :keys => self.pocketknife.ssh_key })
-          else
-             puts "Connecting to.... #{self.name} as user #{user}"
-             rye = Rye::Box.new(self.name, {:user => user })
+             options[:keys] = self.pocketknife.ssh_key
           end
+          if options.size == 1
+             puts "Connecting to.... #{self.name} as user #{user}"
+             
+          end
+          rye = Rye::Box.new(self.name, options)
           rye.disable_safe_mode
           rye
         end
@@ -264,11 +271,11 @@ cd /root &&
         #puts("TMP_CHEF_SOLO_APPLY=#{TMP_CHEF_SOLO_APPLY} contains=#{@CHEF_SOLO_APPLY_CONTENT}")
         TMP_CHEF_SOLO_APPLY.open("w") {|h| h.write(@CHEF_SOLO_APPLY_CONTENT)}
         puts("TMP_TARBALL=#{TMP_TARBALL} contains following files:")
-        puts("VAR_POCKETKNIFE_COOKBOOKS=#{VAR_POCKETKNIFE_COOKBOOKS}")
-        puts("VAR_POCKETKNIFE_SITE_COOKBOOKS=#{VAR_POCKETKNIFE_SITE_COOKBOOKS}")
-        puts("VAR_POCKETKNIFE_ROLES=#{VAR_POCKETKNIFE_ROLES}")
+        puts("@VAR_POCKETKNIFE_COOKBOOKS=#{@VAR_POCKETKNIFE_COOKBOOKS}")
+        puts("@VAR_POCKETKNIFE_SITE_COOKBOOKS=#{@VAR_POCKETKNIFE_SITE_COOKBOOKS}")
+        puts("@VAR_POCKETKNIFE_ROLES=#{@VAR_POCKETKNIFE_ROLES}")
         puts("TMP_SOLO_RB=#{TMP_SOLO_RB}")
-        puts("VAR_POCKETKNIFE_CACHE=#{VAR_POCKETKNIFE_CACHE}")
+        puts("@VAR_POCKETKNIFE_CACHE=#{@VAR_POCKETKNIFE_CACHE}")
         
         TMP_TARBALL.open("w") do |handle|
           Archive::Tar::Minitar.pack(
