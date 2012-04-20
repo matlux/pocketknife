@@ -7,7 +7,9 @@ Using `pocketknife`, you create a project that describes the configuration of yo
 
 With `pocketknife`, you don't need to setup or manage a specialized `chef-server` node or rely on an unreliable network connection to a distant hosted service whose security you don't control, deal with managing `chef`'s security keys, or deal with manually synchronizing data with the `chef-server` datastore.
 
-With `pocketknife`, all of your cookbooks, roles and nodes are stored in easy-to-use files that you can edit, share, backup and version control with tools you already have.
+With `pocketknife`, all of your cookbooks, roles, data_bags and nodes are stored in easy-to-use files that you can edit, share, backup and version control with tools you already have.
+
+The original version of PocketKnife (from Igal), at time or writing, assumes Chef-solo will be executed as root and assumes the default location of the SSH key. Sometimes you don't have and don't need the root credentials to deploy. It could happen when you want to use Chef to deploy an application or the artifacts of an application that will run as a specific user. This happens when you're a dev team that needs to regularly deploy enterprise application components (as opposed to the traditional use case of being an infrastructure team that has the admin access on the machine anyway). This could be used for automatic deployment and testing within a continuous integration environment.
 
 Comparisons
 -----------
@@ -19,6 +21,14 @@ Why create another tool?
 * `chef-solo` is included as part of `chef`, and `pocketknife` uses it. However, `chef-solo` is a low-level tool, and creating and deploying all the files it needs is a significant chore. It also provides no way of deploying or managing your shared and node-specific configuration files. `pocketknife` provides all the missing functionality for creating, managing and deploying, so you don't have to use `chef-solo` directly.
 * `littlechef` is the inspiration for `pocketknife`, it's a great project that I've contributed to and you should definitely [evaluate it](https://github.com/tobami/littlechef). I feel that `pocketknife` offers a more robust, repeatable and automated mechanism for deploying remote nodes; has better documentation, default behavior and command-line support; has good tests and a clearer, more maintainable design; and is written in Ruby so you use the same stack as `chef`.
 
+The Extra features Contained in this fork
+_________________________________________
+
+* Run Chef-solo as any user.
+* define the location of a specific SSH identity Key
+* use password file instead of ssh identity key
+* All remote files are stored under /tmp in order to be accessible by any user that is used by pocketknife.
+
 Usage
 -----
 
@@ -26,7 +36,15 @@ Install the software on the machine you'll be running `pocketknife` on, this is 
 
 * Install Ruby: http://www.ruby-lang.org/
 * Install Rubygems: http://rubygems.org/
-* Install `pocketknife`: `gem install pocketknife`
+* Install `pocketknife`: `gem install pocketknife` - this will install the original pocketknife from Igal (and more importantly) all its dependencies.
+* `cd /path/of/your/choice`
+* `git clone git://github.com/matlux/pocketknife.git`
+* `cd ..`
+* `mv pocketknife pocketknife_alt`
+
+make sure you call pocketknife from the github clone rather than the pocketknife installed on gem. For that reason call the pocketknife with an explicit path to the git repo:
+
+    /path/of/your/choice/pocketknife_alt/bin/pocketknife
 
 Create a new *project*, a special directory that will contain your configuration files. For example, create the `swa` project directory by running:
 
@@ -40,18 +58,18 @@ Create cookbooks in the `cookbooks` directory that describe how your computers s
 
 Override cookbooks in the `site-cookbooks` directory. This has the same structure as `cookbooks`, but any files you put here will override the contents of `cookbooks`. This is useful for storing the original code of a third-party cookbook in `cookbooks` and putting your customizations in `site-cookbooks`.
 
-Optionally define roles in the `roles` directory that describe common behavior and attributes of your computers using JSON syntax using [chef's documentation](http://wiki.opscode.com/display/chef/Roles#Roles-AsJSON). For example, define a role called `ntp_client` by creating a file called `roles/ntp_client.json` with this content:
+Define roles in the `roles` directory that describe common behavior and attributes of your computers using JSON syntax using [chef's documentation](http://wiki.opscode.com/display/chef/Roles#Roles-AsJSON). For example, define a role called `ntp_client` by creating a file called `roles/ntp_client.json` with this content:
 
     {
-      "name": "ntp_client",
+      "name": "myapp1",
       "chef_type": "role",
       "json_class": "Chef::Role",
       "run_list": [
-        "recipe[ntp]"
+        "recipe[myapp]"
       ],
       "override_attributes": {
-        "ntp": {
-          "servers": ["0.pool.ntp.org", "1.pool.ntp.org", "2.pool.ntp.org", "3.pool.ntp.org"]
+        "myapp": {
+          "instanceReq": 2
         }
       }
     }
@@ -60,20 +78,19 @@ Define a new node using the `chef` JSON syntax for [runlist](http://wiki.opscode
 
     {
       "run_list": [
-        "role[ntp_client]"
+        "role[uat]",
+        "role[myapp1]"
       ],
-      "override_attributes": {
-        "ntp": {
-          "servers": ["0.it.pool.ntp.org", "1.it.pool.ntp.org", "2.it.pool.ntp.org", "3.it.pool.ntp.org"]
+      "myapp": {
+          "instanceNumber": 3
         }
-      }
     }
 
 Operations on remote nodes will be performed using SSH. You should consider [configuring ssh-agent](http://mah.everybody.org/docs/ssh) so you don't have to keep typing in your passwords.
 
 Finally, deploy your configuration to the remote machine and see the results. For example, lets deploy the above configuration to the `henrietta.swa.gov.it` host, which can be abbreviated as `henrietta` when calling `pocketknife`:
 
-    pocketknife henrietta
+    /path/of/your/choice/pocketknife_alt/bin/pocketknife henrietta
 
 When deploying a configuration to a node, `pocketknife` will check whether Chef and its dependencies are installed. It something is missing, it will prompt you for whether you'd like to have it install them automatically.
 
@@ -81,22 +98,22 @@ To always install Chef and its dependencies when they're needed, without prompts
 
 If something goes wrong while deploying the configuration, you can display verbose logging from `pocketknife` and Chef by using the `-v` option. For example, deploy the configuration to `henrietta` with verbose logging:
 
-    pocketknife -v henrietta
+    /path/of/your/choice/pocketknife_alt/bin/pocketknife -v henrietta
 
 If you really need to debug on the remote machine, you may be interested about some of the commands and paths:
 
-* `chef-solo-apply` (/usr/local/sbin/chef-solo-apply) will apply the configuration to the machine. You can specify `-l debug` to make it more verbose. Run it with `-h` for help.
-* `csa` (/usr/local/sbin/csa) is a shortcut for `chef-solo-apply` and accepts the same arguments.
-* `/etc/chef/solo.rb` contains the `chef-solo` configuration settings.
-* `/etc/chef/node.json` contains the node-specific configuration, like the `runlist` and attributes.
-* `/var/local/pocketknife` contains the `cookbooks`, `site-cookbooks` and `roles` describing your configuration.
+* `chef-solo-apply` (/tmp/usr/local/sbin/chef-solo-apply) will apply the configuration to the machine. You can specify `-l debug` to make it more verbose. Run it with `-h` for help.
+* `csa` (/tmp/usr/local/sbin/csa) is a shortcut for `chef-solo-apply` and accepts the same arguments.
+* `/tmp/etc/chef/solo.rb` contains the `chef-solo` configuration settings.
+* `/tmp/etc/chef/node.json` contains the node-specific configuration, like the `runlist` and attributes.
+* `/tmp/var/local/pocketknife` contains the `cookbooks`, `site-cookbooks` and `roles` describing your configuration.
 
 Contributing
 ------------
 
-This software is published as open source at https://github.com/igal/pocketknife
+This software is published as open source at https://github.com/matlux/pocketknife
 
-You can view and file issues for this software at https://github.com/igal/pocketknife/issues
+You can view and file issues for this software at https://github.com/matlux/pocketknife/issues
 
 If you'd like to contribute code or documentation:
 
@@ -112,4 +129,4 @@ If you'd like to contribute code or documentation:
 Copyright
 ---------
 
-Copyright (c) 2011 Igal Koshevoy. See `LICENSE.txt` for further details.
+Copyright (c) 2012 Mathieu Gauthron. See `LICENSE.txt` for further details.
