@@ -11,6 +11,8 @@ With `pocketknife`, all of your cookbooks, roles, data_bags and nodes are stored
 
 The original version of PocketKnife (from Igal), at time or writing, assumes Chef-solo will be executed as root and assumes the default location of the SSH key. Sometimes you don't have and don't need the root credentials to deploy. It could happen when you want to use Chef to deploy an application or the artifacts of an application that will run as a specific user. This happens when you're a dev team that needs to regularly deploy enterprise application components (as opposed to the traditional use case of being an infrastructure team that has the admin access on the machine anyway). This could be used for automatic deployment and testing within a continuous integration environment.
 
+Follow a tutorial with [a repo for Chef used with pocketknife](https://github.com/matlux/pocketknife).
+
 Comparisons
 -----------
 
