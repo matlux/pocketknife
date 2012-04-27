@@ -36,29 +36,27 @@ Install the software on the machine you'll be running `pocketknife` on, this is 
 
 * Install Ruby: http://www.ruby-lang.org/
 * Install Rubygems: http://rubygems.org/
-* Install `pocketknife`: `gem install pocketknife` - this will install the original pocketknife from Igal (and more importantly) all its dependencies.
+* Install `archive-tar-minitar`: `gem install archive-tar-minitar` - pocketknife dependency.
+* Install `rye`: `gem install rye` - pocketknife dependency.
 * `cd /path/of/your/choice`
 * `git clone git://github.com/matlux/pocketknife.git`
-* `cd ..`
-* `mv pocketknife pocketknife_alt`
+* `export PATH=/path/of/your/choice/pocketknife:$PATH` - add pocketknife to your PATH
 
-make sure you call pocketknife from the github clone rather than the pocketknife installed on gem. For that reason call the pocketknife with an explicit path to the git repo:
+    /path/of/your/choice/pocketknife/bin/pocketknife
 
-    /path/of/your/choice/pocketknife_alt/bin/pocketknife
+Create a new *project*, a special directory that will contain your configuration files. For example, create the `myNewProject` project directory by running:
 
-Create a new *project*, a special directory that will contain your configuration files. For example, create the `swa` project directory by running:
-
-    pocketknife --create swa
+    pocketknife --create myNewProject
 
 Go into your new *project* directory:
 
-    cd swa
+    cd myNewProject
 
-Create cookbooks in the `cookbooks` directory that describe how your computers should be configured. These are standard `chef` cookbooks, like the [opscode/cookbooks](https://github.com/opscode/cookbooks). For example, download a copy of [opscode/cookbooks/ntp](https://github.com/opscode/cookbooks/tree/master/ntp) as `cookbooks/ntp`.
+Create cookbooks in the `cookbooks` directory that describe how your computers should be configured. These are standard `chef` cookbooks, like the [opscode/cookbooks](https://github.com/opscode/cookbooks). You can find an example, follow a tutorial and download a copy of [chef-cookbooks-repo/cookbooks/myapp](https://github.com/matlux/chef-cookbooks-repo) as `cookbooks/myapp`.
 
 Override cookbooks in the `site-cookbooks` directory. This has the same structure as `cookbooks`, but any files you put here will override the contents of `cookbooks`. This is useful for storing the original code of a third-party cookbook in `cookbooks` and putting your customizations in `site-cookbooks`.
 
-Define roles in the `roles` directory that describe common behavior and attributes of your computers using JSON syntax using [chef's documentation](http://wiki.opscode.com/display/chef/Roles#Roles-AsJSON). For example, define a role called `ntp_client` by creating a file called `roles/ntp_client.json` with this content:
+Define roles in the `roles` directory that describe common behavior and attributes of your computers using JSON syntax using [chef's documentation](http://wiki.opscode.com/display/chef/Roles#Roles-AsJSON). For example, define a role called `myapp1` by creating a file called `roles/myapp1.json` with this content:
 
     {
       "name": "myapp1",
@@ -74,7 +72,7 @@ Define roles in the `roles` directory that describe common behavior and attribut
       }
     }
 
-Define a new node using the `chef` JSON syntax for [runlist](http://wiki.opscode.com/display/chef/Setting+the+run_list+in+JSON+during+run+time) and [attributes](http://wiki.opscode.com/display/chef/Attributes). For example, to define a node with the hostname `henrietta.swa.gov.it` create the `nodes/henrietta.swa.gov.it.json` file, and add the contents below so it uses the `ntp_client` role and overrides its attributes to use a local NTP server:
+Define a new node using the `chef` JSON syntax for [runlist](http://wiki.opscode.com/display/chef/Setting+the+run_list+in+JSON+during+run+time) and [attributes](http://wiki.opscode.com/display/chef/Attributes). For example, to define a node with the hostname `henrietta.swa.gov.it` create the `nodes/henrietta.swa.gov.it.json` file, and add the contents below so it uses the `myapp1` role and overrides its attributes to use a local myapp1 server:
 
     {
       "run_list": [
@@ -90,7 +88,7 @@ Operations on remote nodes will be performed using SSH. You should consider [con
 
 Finally, deploy your configuration to the remote machine and see the results. For example, lets deploy the above configuration to the `henrietta.swa.gov.it` host, which can be abbreviated as `henrietta` when calling `pocketknife`:
 
-    /path/of/your/choice/pocketknife_alt/bin/pocketknife henrietta
+    pocketknife henrietta
 
 When deploying a configuration to a node, `pocketknife` will check whether Chef and its dependencies are installed. It something is missing, it will prompt you for whether you'd like to have it install them automatically.
 
@@ -98,7 +96,27 @@ To always install Chef and its dependencies when they're needed, without prompts
 
 If something goes wrong while deploying the configuration, you can display verbose logging from `pocketknife` and Chef by using the `-v` option. For example, deploy the configuration to `henrietta` with verbose logging:
 
-    /path/of/your/choice/pocketknife_alt/bin/pocketknife -v henrietta
+    pocketknife -v henrietta
+
+How to use the new features:
+
+Imagine you want pocketknife to execute chef-solo onto a remote machine without root access. What would you do? You can use the `--user` option to do that. It will either function interactivelly if you enter the password or it will make use of an ssh key in it's default location:
+
+    pocketknife --user bob henrietta
+
+Imagine you're not using a default location of the ssh key, you can use the `--sshkey` option:
+
+    pocketknife --user bob --sshkey ~/.ssh/id_rsa_alt henrietta
+
+Now imagine that your organisation has banned the use of ssh keys and you are fed up with repeatedly typing your password or want to automate the procedure. Then use the following argument:
+
+    pocketknife --user bob --password password.txt henrietta
+
+The password file should contain a list of user and passwords as follow:
+
+    bob: bobpassword
+    user2: password2
+    user3: password3
 
 If you really need to debug on the remote machine, you may be interested about some of the commands and paths:
 
