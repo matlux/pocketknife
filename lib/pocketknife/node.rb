@@ -24,7 +24,12 @@ class Pocketknife
       self.pocketknife = pocketknife
       self.connection_cache = nil
       @user = self.pocketknife.user
-      @working_dir = Pathname.new("/tmp/chefwork")
+      
+      
+      workdir = "/home/#{@user}/chefwork" if @user != "root"
+      workdir = "/root/chefwork" if @user == "root"
+      
+      @working_dir = Pathname.new("/home/#{@user}/chefwork")
       
       puts "@working_dir=#{@working_dir}"
           # Remote path to Chef's settings
@@ -96,7 +101,7 @@ chef-solo -j #{@NODE_JSON} "$@"
           end
           options = {:user => user }
           if self.pocketknife.password
-             puts "Connecting to.... #{self.name} as user #{user} with ssh key"
+             puts "Connecting to.... #{self.name} as user #{user} with password file"
              options[:password] = self.pocketknife.password
           end
           if self.pocketknife.ssh_key != nil and self.pocketknife.ssh_key != ""
