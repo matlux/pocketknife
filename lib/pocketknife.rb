@@ -115,6 +115,11 @@ OPTIONS:
       parser.on("-I", "--noinstall", "Don't install Chef automatically") do |v|
         pocketknife.can_install = false
       end
+      
+      parser.on("-A", "--action ACTION", "Action to carry out") do |name|
+        options[:action] = true
+        pocketknife.actionName = name
+      end
 
       begin
         arguments = parser.parse!
@@ -152,9 +157,14 @@ OPTIONS:
           pocketknife.apply(nodes)
         end
 
-        if not options[:upload] and not options[:apply]
+        if not options[:upload] and not options[:apply] and not options[:action]
           puts "deploy"
           pocketknife.deploy(nodes)
+        end
+        
+        if not options[:upload] and not options[:apply] and options[:action]
+          puts "action #{pocketknife.actionName}"
+          pocketknife.action(nodes)
         end
       rescue NodeError => e
         puts "! #{e.node}: #{e}"
@@ -181,6 +191,9 @@ OPTIONS:
 
   # password when not using key
   attr_accessor :password
+
+  # Action
+  attr_accessor :actionName
 
 
   # Can chef and its dependencies be installed automatically if not found? true means perform installation without prompting, false means quit if chef isn't available, and nil means prompt the user for input.
@@ -260,11 +273,9 @@ OPTIONS:
   def deploy(nodes)
     node_manager.assert_known(nodes)
 
-    #Node.prepare_upload do
-      for node in nodes
+    for node in nodes
         node_manager.find(node).deploy
-      end
-    #end
+    end
   end
 
   # Uploads configuration information to remote nodes.
@@ -273,11 +284,9 @@ OPTIONS:
   def upload(nodes)
     node_manager.assert_known(nodes)
 
-    #Node.prepare_upload do
       for node in nodes
         node_manager.find(node).upload
       end
-    #end
   end
 
   # Applies configurations to remote nodes.
@@ -290,4 +299,16 @@ OPTIONS:
       node_manager.find(node).apply
     end
   end
+  
+  # action configuration to the nodes.
+  #
+  # @params[Array<String>] nodes A list of node names.
+  def action(nodes)
+    node_manager.assert_known(nodes)
+
+    for node in nodes
+        node_manager.find(node).action
+    end
+  end
+
 end

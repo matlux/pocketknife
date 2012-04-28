@@ -1,3 +1,5 @@
+require 'json'
+
 class Pocketknife
   # == Node
   #
@@ -371,6 +373,25 @@ cd "#{@VAR_POCKETKNIFE_CACHE}" &&
       puts "Deploys the configuration to the node, which calls {#upload} and {#apply}."
       prepare_upload {upload}
       self.apply
+    end
+    
+    # Action the configuration to the node.
+    def action
+      #action = 
+      puts "Action #{self.pocketknife.actionName} the configuration to the node #{name}.json."
+      json = File.read('nodes/' + name + '.json')
+      puts "#{json}"
+      doc = JSON.parse(json)
+      newdoc = doc.dup
+      newdoc["run_list"] = doc["run_list"].reject {|elt| elt =~ /role\[action-.*/ } + ["role[action-" + self.pocketknife.actionName + "]"]
+      newjson = JSON.generate(newdoc)
+      
+      # Create a new file and write to it  
+      File.open('test.json', 'w') do |f2|  
+        # use "\n" for two lines of text  
+        f2.puts newjson  
+      end  
+      #pocketknife.action
     end
 
     # Executes commands on the external node.
