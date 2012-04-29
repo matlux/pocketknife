@@ -1,4 +1,6 @@
 require 'json'
+require 'fileutils'
+include FileUtils
 
 class Pocketknife
   # == Node
@@ -379,7 +381,12 @@ cd "#{@VAR_POCKETKNIFE_CACHE}" &&
     def action
       #action = 
       puts "Action #{self.pocketknife.actionName} the configuration to the node #{name}.json."
-      json = File.read('nodes/' + name + '.json')
+      
+      if File.directory?('nodes') and not File.directory?('nodetemplates')
+        cp_r "nodes", "nodetemplates"
+      end
+      
+      json = File.read('nodetemplates/' + name + '.json')
       puts "#{json}"
       doc = JSON.parse(json)
       newdoc = doc.dup
@@ -387,7 +394,7 @@ cd "#{@VAR_POCKETKNIFE_CACHE}" &&
       newjson = JSON.generate(newdoc)
       
       # Create a new file and write to it  
-      File.open('test.json', 'w') do |f2|  
+      File.open('nodes/' + name + '.json', 'w') do |f2|  
         # use "\n" for two lines of text  
         f2.puts newjson  
       end  
