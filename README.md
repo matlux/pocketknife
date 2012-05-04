@@ -30,6 +30,9 @@ _________________________________________
 * define the location of a specific SSH identity Key
 * use password file instead of ssh identity key
 * All remote files are stored under /tmp in order to be accessible by any user that is used by pocketknife.
+* Actions let you assign a role mapping to the following states:
+
+    start,stop,restart,install
 
 Usage
 -----
@@ -102,6 +105,9 @@ If something goes wrong while deploying the configuration, you can display verbo
 
 How to use the new features:
 
+Non root use of pocketknife
+---------------------------
+
 Imagine you want pocketknife to execute chef-solo onto a remote machine without root access. What would you do? You can use the `--user` option to do that. It will either function interactivelly if you enter the password or it will make use of an ssh key in it's default location:
 
     pocketknife --user bob henrietta
@@ -119,6 +125,51 @@ The password file should contain a list of user and passwords as follow:
     bob: bobpassword
     user2: password2
     user3: password3
+
+Use of actions
+--------------
+
+Start the components on the `ahost` machine as follow:
+
+    pocketknife --action start ahost
+    pocketknife --user bob ahost
+
+* `coherence` is referring to a hostname. Change the name of the file and it's content accordingly to your hostname.
+
+Stop components on the `ahost` machine as follow:
+
+    pocketknife --action stop ahost
+    pocketknife --user bob ahost
+
+When you use the `--action` option a directory `nodetemplate` is created with a copy of all your `nodes`. A `start` action will add a role as follow:
+
+    {
+      "run_list": [
+        "role[uat]",
+        "role[myapp1]",
+        "role[action-start]"
+      ],
+      "myapp": {
+          "instanceNumber": 3
+        }
+    }
+
+a stop action will lead to the following state:
+
+    {
+      "run_list": [
+        "role[uat]",
+        "role[myapp1]",
+        "role[action-stop]"
+      ],
+      "myapp": {
+          "instanceNumber": 3
+        }
+    }
+
+
+The recipe will take into account the state of the action-[actionName] role to `start`, `stop` or only `install` the components. See [a repo for Chef used with pocketknife](https://github.com/matlux/pocketknife) for a tutorial with more details.
+
 
 If you really need to debug on the remote machine, you may be interested about some of the commands and paths:
 
