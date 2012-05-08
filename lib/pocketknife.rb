@@ -121,6 +121,12 @@ OPTIONS:
         pocketknife.actionName = name
       end
 
+      parser.on("-D", "--action-dry-run ACTION", "Action to apply carry out") do |name|
+        options[:action] = true
+        pocketknife.actionName = name
+        pocketknife.dry_run = true
+      end
+
       begin
         arguments = parser.parse!
         puts "arguments=#{arguments} options=#{options}"
@@ -147,6 +153,11 @@ OPTIONS:
 
       begin
       	puts "options=#{options}"
+        if options[:action]
+          puts "action #{pocketknife.actionName}"
+          pocketknife.action(nodes)
+        end
+        
         if options[:upload]
           puts "upload"
           pocketknife.upload(nodes)
@@ -157,15 +168,11 @@ OPTIONS:
           pocketknife.apply(nodes)
         end
 
-        if not options[:upload] and not options[:apply] and not options[:action]
+        if not options[:upload] and not options[:apply] and not pocketknife.dry_run
           puts "deploy"
           pocketknife.deploy(nodes)
         end
-        
-        if not options[:upload] and not options[:apply] and options[:action]
-          puts "action #{pocketknife.actionName}"
-          pocketknife.action(nodes)
-        end
+
       rescue NodeError => e
         puts "! #{e.node}: #{e}"
         exit -1
@@ -194,6 +201,8 @@ OPTIONS:
 
   # Action
   attr_accessor :actionName
+  # Action
+  attr_accessor :dry_run
 
 
   # Can chef and its dependencies be installed automatically if not found? true means perform installation without prompting, false means quit if chef isn't available, and nil means prompt the user for input.

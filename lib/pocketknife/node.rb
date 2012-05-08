@@ -19,6 +19,24 @@ class Pocketknife
     # Hash with information about platform, cached by {#platform}.
     attr_accessor :platform_cache
 
+    def getWorkdir(doc,user)
+      suffix = ".chefwork"
+      
+      if doc and doc["pocketknife"] and doc["pocketknife"]["remoteTmpDir"]
+        remote = doc["pocketknife"]["remoteTmpDir"]
+        if remote[0,1]=="/"
+          return remote
+        else
+          suffix = remote
+        end
+      end
+      
+      workdir = "/home/#{@user}/#{suffix}" if user != "root"
+      workdir = "/root/#{suffix}" if user == "root"
+      return workdir
+    end
+
+
     # Initialize a new node.
     #
     # @param [String] name A node name.
@@ -29,11 +47,15 @@ class Pocketknife
       self.connection_cache = nil
       @user = self.pocketknife.user
       
-      
-      workdir = "/home/#{@user}/chefwork" if @user != "root"
-      workdir = "/root/chefwork" if @user == "root"
-      
-      @working_dir = Pathname.new("/home/#{@user}/chefwork")
+      pocketknifeConf = 'pocketknife.json'
+      if File.file?(pocketknifeConf)
+        json = File.read(pocketknifeConf) 
+        puts "#{json}"
+        doc = JSON.parse(json)
+      end
+      workdir = getWorkdir(doc,@user)
+    
+      @working_dir = Pathname.new("#{workdir}")
       
       puts "@working_dir=#{@working_dir}"
           # Remote path to Chef's settings
@@ -392,13 +414,13 @@ cd "#{@VAR_POCKETKNIFE_CACHE}" &&
       newdoc = doc.dup
       newdoc["run_list"] = doc["run_list"].reject {|elt| elt =~ /role\[action-.*/ } + ["role[action-" + self.pocketknife.actionName + "]"]
       newjson = JSON.generate(newdoc)
+      self.say("#{newjson}")
       
       # Create a new file and write to it  
       File.open('nodes/' + name + '.json', 'w') do |f2|  
         # use "\n" for two lines of text  
         f2.puts newjson  
       end  
-      #pocketknife.action
     end
 
     # Executes commands on the external node.

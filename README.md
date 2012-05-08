@@ -131,15 +131,23 @@ Use of actions
 
 Start the components on the `ahost` machine as follow:
 
-    pocketknife --action start ahost
+    pocketknife --action-dry-run start ahost
     pocketknife --user bob ahost
+    
+or equivalent call in a combined command
+
+    pocketknife --action start --user bob ahost
 
 * `coherence` is referring to a hostname. Change the name of the file and it's content accordingly to your hostname.
 
 Stop components on the `ahost` machine as follow:
 
-    pocketknife --action stop ahost
+    pocketknife --action-dry-run stop ahost
     pocketknife --user bob ahost
+
+or equivalent call in a combined command
+
+    pocketknife --action stop --user bob ahost
 
 When you use the `--action` option a directory `nodetemplate` is created with a copy of all your `nodes`. A `start` action will add a role as follow:
 
@@ -167,6 +175,26 @@ a stop action will lead to the following state:
         }
     }
 
+Change of remote temp directory
+-------------------------------
+
+pocketknife by default will use the following directory to copy the repository on each machine deploying to:
+
+    workdir = "/home/#{user}/.chefwork" if user != "root"
+    workdir = "/root/.chefwork" if user == "root"
+    
+    
+Alternativelly you can create a `pocketknife.json` on the root of the repository with the following content:
+
+    {
+      "pocketknife": {
+          "remoteTmpDir": "/tmp/vr/.chefwork"
+        }
+    }
+
+`/tmp/vr/.chefwork` will be used instead.
+
+* if the directory starts without a '/' (slash) then the user home directory will be prepended.
 
 The recipe will take into account the state of the action-[actionName] role to `start`, `stop` or only `install` the components. See [a repo for Chef used with pocketknife](https://github.com/matlux/pocketknife) for a tutorial with more details.
 
