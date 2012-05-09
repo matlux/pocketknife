@@ -24,10 +24,72 @@ class Pocketknife
     def initialize(name, pocketknife)
       self.name = name
       self.pocketknife = pocketknife
-      if pocketknife.user != nil and pocketknife.user != ""
+      if pocketknife.sudoName
+         @sudo = "sudo -u #{pocketknife.sudoName} "
+      end   
+      if pocketknife.sudoName == "root"
          @sudo = "sudo "
       end   
       self.connection_cache = nil
+      @user = self.pocketknife.user
+      @working_dir = Pathname.new("/tmp/chefwork")
+      
+      puts "@working_dir=#{@working_dir}"
+          # Remote path to Chef's settings
+    # @private
+    @ETC_CHEF = @working_dir + "etc/chef"
+    # Remote path to solo.rb
+    # @private
+    @SOLO_RB = @ETC_CHEF + "solo.rb"
+    # Remote path to node.json
+    # @private
+    @NODE_JSON = @ETC_CHEF + "node.json"
+    # Remote path to pocketknife's deployed configuration
+    # @private
+    @VAR_POCKETKNIFE = @working_dir + "var/local/pocketknife"
+    # Remote path to pocketknife's cache
+    # @private
+    @VAR_POCKETKNIFE_CACHE = @VAR_POCKETKNIFE + "cache"
+    # Remote path to temporary tarball containing uploaded files.
+    # @private
+    @VAR_POCKETKNIFE_TARBALL = @VAR_POCKETKNIFE_CACHE + "pocketknife.tmp"
+    # Remote path to pocketknife's cookbooks
+    # @private
+    @VAR_POCKETKNIFE_COOKBOOKS = @VAR_POCKETKNIFE + "cookbooks"
+    # Remote path to pocketknife's site-cookbooks
+    # @private
+    @VAR_POCKETKNIFE_SITE_COOKBOOKS = @VAR_POCKETKNIFE + "site-cookbooks"
+    # Remote path to pocketknife's roles
+    # @private
+    @VAR_POCKETKNIFE_ROLES = @VAR_POCKETKNIFE + "roles"
+    # Remote path to pocketknife's databags
+    # @private
+    @VAR_POCKETKNIFE_DATA_BAGS = @VAR_POCKETKNIFE + "data_bags"
+    # Content of the solo.rb file
+    # @private
+    @SOLO_RB_CONTENT = <<-HERE
+file_cache_path "#{@VAR_POCKETKNIFE_CACHE}"
+cookbook_path ["#{@VAR_POCKETKNIFE_COOKBOOKS}", "#{@VAR_POCKETKNIFE_SITE_COOKBOOKS}"]
+role_path "#{@VAR_POCKETKNIFE_ROLES}"
+data_bag_path "#{@VAR_POCKETKNIFE_DATA_BAGS}"
+cache_type "BasicFile"
+cache_options({ :path => "#{@working_dir}/var/chef/cache/checksums", :skip_expires => true })
+file_backup_path "#{@working_dir}/var/chef/backup"
+    HERE
+    # Remote path to chef-solo-apply
+    # @private
+    @CHEF_SOLO_APPLY = @working_dir + "usr/local/sbin/chef-solo-apply"
+    # Remote path to csa
+    # @private
+    @CHEF_SOLO_APPLY_ALIAS = @CHEF_SOLO_APPLY.dirname + "csa"
+    # Content of the chef-solo-apply file
+    # @private
+    @CHEF_SOLO_APPLY_CONTENT = <<-HERE
+#!/bin/sh
+chef-solo -j #{@NODE_JSON} "$@"
+    HERE
+      
+      puts @ETC_CHEF
     end
 
     # Returns a Rye::Box connection.
@@ -41,10 +103,11 @@ class Pocketknife
           if self.pocketknife.user != nil and self.pocketknife.user != ""
              user = self.pocketknife.user
           end
-          puts "Connecting to.... #{self.name} as user #{user}"          
-          if self.pocketknife.ssh_key != nil
+          if self.pocketknife.ssh_key != nil and self.pocketknife.ssh_key != ""
+             puts "Connecting to.... #{self.name} as user #{user} with ssh key"
              rye = Rye::Box.new(self.name, {:user => user, :keys => self.pocketknife.ssh_key })
           else
+             puts "Connecting to.... #{self.name} as user #{user}"
              rye = Rye::Box.new(self.name, {:user => user })
           end
           rye.disable_safe_mode
@@ -223,18 +286,25 @@ class Pocketknife
     #   end
     #
     # @yield [] Prepares the upload, executes the block, and cleans up the upload when done.
-    def self.prepare_upload(&block)
+    def prepare_upload(&block)
       begin
         puts("prepare upload...")
         # TODO either do this in memory or scope this to the PID to allow concurrency
-        TMP_SOLO_RB.open("w") {|h| h.write(SOLO_RB_CONTENT)}
-        TMP_CHEF_SOLO_APPLY.open("w") {|h| h.write(CHEF_SOLO_APPLY_CONTENT)}
+        TMP_SOLO_RB.open("w") {|h| h.write(@SOLO_RB_CONTENT)}
+        TMP_CHEF_SOLO_APPLY.open("w") {|h| h.write(@CHEF_SOLO_APPLY_CONTENT)}
         # minitar gem on windows tar file corrupt so use alternative command
         if RUBY_PLATFORM.index("mswin") != nil or RUBY_PLATFORM.index("i386-mingw32") != nil
            puts "On windows using tar.exe...."
            puts "#{ENV['EC2DREAM_HOME']}/tar/tar.exe cvf #{TMP_TARBALL.to_s} #{VAR_POCKETKNIFE_COOKBOOKS.basename.to_s} #{VAR_POCKETKNIFE_SITE_COOKBOOKS.basename.to_s} #{VAR_POCKETKNIFE_ROLES.basename.to_s} #{TMP_SOLO_RB.to_s} #{TMP_CHEF_SOLO_APPLY.to_s}" 
            system "#{ENV['EC2DREAM_HOME']}/tar/tar.exe cvf #{TMP_TARBALL.to_s} #{VAR_POCKETKNIFE_COOKBOOKS.basename.to_s} #{VAR_POCKETKNIFE_SITE_COOKBOOKS.basename.to_s} #{VAR_POCKETKNIFE_ROLES.basename.to_s} #{TMP_SOLO_RB.to_s} #{TMP_CHEF_SOLO_APPLY.to_s}" 
         else
+           puts("TMP_TARBALL=#{TMP_TARBALL} contains following files:")
+           puts("VAR_POCKETKNIFE_COOKBOOKS=#{VAR_POCKETKNIFE_COOKBOOKS}")
+           puts("VAR_POCKETKNIFE_SITE_COOKBOOKS=#{VAR_POCKETKNIFE_SITE_COOKBOOKS}")
+           puts("VAR_POCKETKNIFE_ROLES=#{VAR_POCKETKNIFE_ROLES}")
+           puts("TMP_SOLO_RB=#{TMP_SOLO_RB}")
+           puts("VAR_POCKETKNIFE_CACHE=#{VAR_POCKETKNIFE_CACHE}")
+        
            TMP_TARBALL.open("w") do |handle|
              Archive::Tar::Minitar.pack(
               [
@@ -263,12 +333,13 @@ class Pocketknife
     end
 
     # Cleans up cache of shared files uploaded to all nodes. This cache is created by the {prepare_upload} method.
-    def self.cleanup_upload
+    def cleanup_upload
       [
         TMP_TARBALL,
         TMP_SOLO_RB,
         TMP_CHEF_SOLO_APPLY
       ].each do |path|
+      	puts "delete #{path}"
         path.unlink if path.exist?
       end
     end
@@ -320,28 +391,29 @@ class Pocketknife
       self.say("Removing old files...", false)
       self.execute <<-HERE
    umask 0377 &&
-  #{@sudo}rm -rf "#{ETC_CHEF}" "#{VAR_POCKETKNIFE}" "#{VAR_POCKETKNIFE_CACHE}" "#{CHEF_SOLO_APPLY}" "#{CHEF_SOLO_APPLY_ALIAS}" &&
-  #{@sudo}mkdir -p "#{ETC_CHEF}" "#{VAR_POCKETKNIFE}" "#{VAR_POCKETKNIFE_CACHE}" "#{CHEF_SOLO_APPLY.dirname}" &&
-  #{@sudo}chmod -R a+rwX "#{ETC_CHEF}" &&
-  #{@sudo}chmod -R a+rwX "#{VAR_POCKETKNIFE}" &&
-  #{@sudo}chmod -R a+rwX "#{VAR_POCKETKNIFE_CACHE}"
+  #{@sudo}rm -rf "#{@ETC_CHEF}" "#{@VAR_POCKETKNIFE}" "#{@VAR_POCKETKNIFE_CACHE}" "#{@CHEF_SOLO_APPLY}" "#{@CHEF_SOLO_APPLY_ALIAS}" &&
+  #{@sudo}mkdir -p "#{@ETC_CHEF}" "#{@VAR_POCKETKNIFE}" "#{@VAR_POCKETKNIFE_CACHE}" "#{@CHEF_SOLO_APPLY.dirname}" &&
+  #{@sudo}chmod -R a+rwX "#{@ETC_CHEF}" &&
+  #{@sudo}chmod -R a+rwX "#{@VAR_POCKETKNIFE}" &&
+  #{@sudo}chmod -R a+rwX "#{@VAR_POCKETKNIFE_CACHE}"
   HERE
 
-      self.say("Uploading new files...", false)
-      self.say("Uploading #{self.local_node_json_pathname} to #{NODE_JSON}", false)
-      self.connection.file_upload(self.local_node_json_pathname.to_s, NODE_JSON.to_s)
-      self.connection.file_upload(TMP_TARBALL.to_s, VAR_POCKETKNIFE_TARBALL.to_s)
+      self.say("Uploading new files... from #{self.local_node_json_pathname.to_s} to #{@NODE_JSON.to_s}", false)
+      self.say("and from #{TMP_TARBALL.to_s} to #{@VAR_POCKETKNIFE_TARBALL.to_s}", false)
+      self.connection.file_upload(self.local_node_json_pathname.to_s, @NODE_JSON.to_s)
+      self.connection.file_upload(TMP_TARBALL.to_s, @VAR_POCKETKNIFE_TARBALL.to_s)
+
       self.say("Installing new files...", false)
       self.execute <<-HERE, true
-  cd "#{VAR_POCKETKNIFE_CACHE}" &&
-  #{@sudo}tar xvf "#{VAR_POCKETKNIFE_TARBALL}" &&
-  #{@sudo}chmod -R a+rwX "#{VAR_POCKETKNIFE_CACHE}"  &&
-  #{@sudo}mv "#{TMP_SOLO_RB}" "#{SOLO_RB}" &&
-  #{@sudo}mv "#{TMP_CHEF_SOLO_APPLY}" "#{CHEF_SOLO_APPLY}" &&
-  #{@sudo}chmod u+x "#{CHEF_SOLO_APPLY}" &&
-  #{@sudo}ln -s "#{CHEF_SOLO_APPLY.basename}" "#{CHEF_SOLO_APPLY_ALIAS}" &&
-  #{@sudo}rm "#{VAR_POCKETKNIFE_TARBALL}" &&
-  #{@sudo}mv * "#{VAR_POCKETKNIFE}"
+  cd "#{@VAR_POCKETKNIFE_CACHE}" &&
+  #{@sudo}tar xvf "#{@VAR_POCKETKNIFE_TARBALL}" &&
+  #{@sudo}chmod -R a+rwX "#{@VAR_POCKETKNIFE_CACHE}"  &&
+  #{@sudo}mv "#{TMP_SOLO_RB}" "#{@SOLO_RB}" &&
+  #{@sudo}mv "#{TMP_CHEF_SOLO_APPLY}" "#{@CHEF_SOLO_APPLY}" &&
+  #{@sudo}chmod u+x "#{@CHEF_SOLO_APPLY}" &&
+  #{@sudo}ln -s "#{@CHEF_SOLO_APPLY.basename}" "#{@CHEF_SOLO_APPLY_ALIAS}" &&
+  #{@sudo}rm "#{@VAR_POCKETKNIFE_TARBALL}" &&
+  #{@sudo}mv * "#{@VAR_POCKETKNIFE}"
       HERE
 
       self.say("Finished uploading!", false)
@@ -356,7 +428,7 @@ class Pocketknife
       self.install
 
       self.say("Applying configuration...", true)
-      command = "#{@sudo}chef-solo -j #{NODE_JSON}"
+      command = "#{@sudo}chef-solo -j #{@NODE_JSON} -c #{@SOLO_RB}"
       command << " -l debug" if self.pocketknife.verbosity == true
       self.execute(command, true)
       self.say("Finished applying!")
@@ -364,7 +436,8 @@ class Pocketknife
 
     # Deploys the configuration to the node, which calls {#upload} and {#apply}.
     def deploy
-      self.upload
+      puts "Deploys the configuration to the node, which calls {#upload} and {#apply}."
+      prepare_upload {upload}
       self.apply
     end
 
@@ -386,52 +459,22 @@ class Pocketknife
       self.connection.stdout_hook = nil
     end
 
-    # Remote path to Chef's settings
-    # @private
-    ETC_CHEF = Pathname.new("/etc/chef")
-    # Remote path to solo.rb
-    # @private
-    SOLO_RB = ETC_CHEF + "solo.rb"
-    # Remote path to node.json
-    # @private
-    NODE_JSON = ETC_CHEF + "node.json"
-    # Remote path to pocketknife's deployed configuration
-    # @private
-    VAR_POCKETKNIFE = Pathname.new("/var/local/pocketknife")
+
     # Remote path to pocketknife's cache
     # @private
-    VAR_POCKETKNIFE_CACHE = VAR_POCKETKNIFE + "cache"
+    VAR_POCKETKNIFE_CACHE = Pathname.new("cache")
     # Remote path to temporary tarball containing uploaded files.
     # @private
-    VAR_POCKETKNIFE_TARBALL = VAR_POCKETKNIFE_CACHE + "pocketknife.tmp"
-    # Remote path to pocketknife's cookbooks
-    # @private
-    VAR_POCKETKNIFE_COOKBOOKS = VAR_POCKETKNIFE + "cookbooks"
+    VAR_POCKETKNIFE_COOKBOOKS = Pathname.new("cookbooks")
     # Remote path to pocketknife's site-cookbooks
     # @private
-    VAR_POCKETKNIFE_SITE_COOKBOOKS = VAR_POCKETKNIFE + "site-cookbooks"
+    VAR_POCKETKNIFE_SITE_COOKBOOKS = Pathname.new("site-cookbooks")
     # Remote path to pocketknife's roles
     # @private
-    VAR_POCKETKNIFE_ROLES = VAR_POCKETKNIFE + "roles"
-    # Content of the solo.rb file
+    VAR_POCKETKNIFE_ROLES = Pathname.new("roles")
+    # Remote path to pocketknife's databags
     # @private
-    SOLO_RB_CONTENT = <<-HERE
-file_cache_path "#{VAR_POCKETKNIFE_CACHE}"
-cookbook_path ["#{VAR_POCKETKNIFE_COOKBOOKS}", "#{VAR_POCKETKNIFE_SITE_COOKBOOKS}"]
-role_path "#{VAR_POCKETKNIFE_ROLES}"
-    HERE
-    # Remote path to chef-solo-apply
-    # @private
-    CHEF_SOLO_APPLY = Pathname.new("/usr/local/sbin/chef-solo-apply")
-    # Remote path to csa
-    # @private
-    CHEF_SOLO_APPLY_ALIAS = CHEF_SOLO_APPLY.dirname + "csa"
-    # Content of the chef-solo-apply file
-    # @private
-    CHEF_SOLO_APPLY_CONTENT = <<-HERE
-#!/bin/sh
-chef-solo -j #{NODE_JSON} "$@"
-    HERE
+    VAR_POCKETKNIFE_DATA_BAGS = Pathname.new("data_bags")
     # Local path to solo.rb that will be included in the tarball
     # @private
     TMP_SOLO_RB = Pathname.new("solo.rb.tmp")

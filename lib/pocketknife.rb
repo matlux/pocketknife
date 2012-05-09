@@ -82,6 +82,11 @@ OPTIONS:
       
       parser.on("-s", "--sudo USER", "Run under non-root users with sudo") do |name|
         options[:sudo] = true
+        pocketknife.sudoName = name
+      end
+
+      parser.on("-u", "--user USER", "Run under non-root users and will not try to sudo. The user needs to have sufficient amount of right to do what it needs carrying out") do |name|
+        options[:user] = true
         pocketknife.user = name
       end
       
@@ -108,6 +113,7 @@ OPTIONS:
 
       begin
         arguments = parser.parse!
+        puts "arguments=#{arguments} options=#{options}"
       rescue OptionParser::MissingArgument => e
         puts parser
         puts
@@ -125,15 +131,19 @@ OPTIONS:
       end
 
       begin
+      	puts "options=#{options}"
         if options[:upload]
+          puts "upload"
           pocketknife.upload(nodes)
         end
 
         if options[:apply]
+          puts "apply"
           pocketknife.apply(nodes)
         end
 
         if not options[:upload] and not options[:apply]
+          puts "deploy"
           pocketknife.deploy(nodes)
         end
       rescue NodeError => e
@@ -157,6 +167,9 @@ OPTIONS:
   attr_accessor :ssh_key
   
   # user when doing sudo access
+  attr_accessor :sudoName
+  
+  # user when not using root
   attr_accessor :user
 
 
@@ -171,9 +184,10 @@ OPTIONS:
   # @option [Boolean] verbosity Amount of detail to display. +true+ means verbose, +nil+ means normal, +false+ means quiet.
   # @option [Boolean] install Install Chef and its dependencies if needed? +true+ means do so automatically, +false+ means don't, and +nil+ means display a prompt to ask the user what to do.
   def initialize(opts={})
+    puts "opts=#{opts}"
     self.verbosity   = opts[:verbosity]
     self.can_install = opts[:install]
-
+    self.user = "root"
     self.node_manager = NodeManager.new(self)
   end
 
@@ -236,11 +250,11 @@ OPTIONS:
   def deploy(nodes)
     node_manager.assert_known(nodes)
 
-    Node.prepare_upload do
+    #Node.prepare_upload do
       for node in nodes
         node_manager.find(node).deploy
       end
-    end
+    #end
   end
 
   # Uploads configuration information to remote nodes.
@@ -249,11 +263,11 @@ OPTIONS:
   def upload(nodes)
     node_manager.assert_known(nodes)
 
-    Node.prepare_upload do
+    #Node.prepare_upload do
       for node in nodes
         node_manager.find(node).upload
       end
-    end
+    #end
   end
 
   # Applies configurations to remote nodes.
