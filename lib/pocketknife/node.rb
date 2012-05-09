@@ -393,27 +393,26 @@ chef-solo -j #{@NODE_JSON} "$@"
  
        self.say("Removing old files...", false)
        self.execute <<-HERE
-    umask 0377 &&
-   rm -rf "#{ETC_CHEF}" "#{VAR_POCKETKNIFE}" "#{VAR_POCKETKNIFE_CACHE}" "#{CHEF_SOLO_APPLY}" "#{CHEF_SOLO_APPLY_ALIAS}" &&
-   mkdir -p "#{ETC_CHEF}" "#{VAR_POCKETKNIFE}" "#{VAR_POCKETKNIFE_CACHE}" "#{CHEF_SOLO_APPLY.dirname}" 
+    umask 0002 &&
+   rm -rf "#{@ETC_CHEF}" "#{@VAR_POCKETKNIFE}" "#{@VAR_POCKETKNIFE_CACHE}" "#{@CHEF_SOLO_APPLY}" "#{@CHEF_SOLO_APPLY_ALIAS}" &&
+   mkdir -p "#{@ETC_CHEF}" "#{@VAR_POCKETKNIFE}" "#{@VAR_POCKETKNIFE_CACHE}" "#{@CHEF_SOLO_APPLY.dirname}"
    HERE
  
        self.say("Uploading new files...", false)
-       self.say("Uploading #{self.local_node_json_pathname} to #{NODE_JSON}", false)
-       self.connection.file_upload(self.local_node_json_pathname.to_s, NODE_JSON.to_s)
-       self.connection.file_upload(TMP_TARBALL.to_s, VAR_POCKETKNIFE_TARBALL.to_s)
+       self.say("Uploading #{self.local_node_json_pathname} to #{@NODE_JSON}", false)
+       self.connection.file_upload(self.local_node_json_pathname.to_s, @NODE_JSON.to_s)
+       self.connection.file_upload(TMP_TARBALL.to_s, @VAR_POCKETKNIFE_TARBALL.to_s)
        self.say("Installing new files...", false)
        self.execute <<-HERE, true
-   cd "#{VAR_POCKETKNIFE_CACHE}" &&
-   tar xvf "#{VAR_POCKETKNIFE_TARBALL}" &&
+   cd "#{@VAR_POCKETKNIFE_CACHE}" &&
+   tar xvf "#{@VAR_POCKETKNIFE_TARBALL}" &&
    chmod -R u+rwX,go= . &&
-   chown -R root:root . &&
-   mv "#{TMP_SOLO_RB}" "#{SOLO_RB}" &&
-   mv "#{TMP_CHEF_SOLO_APPLY}" "#{CHEF_SOLO_APPLY}" &&
-   chmod u+x "#{CHEF_SOLO_APPLY}" &&
-   ln -s "#{CHEF_SOLO_APPLY.basename}" "#{CHEF_SOLO_APPLY_ALIAS}" &&
-   rm "#{VAR_POCKETKNIFE_TARBALL}" &&
-   mv * "#{VAR_POCKETKNIFE}"
+   mv "#{TMP_SOLO_RB}" "#{@SOLO_RB}" &&
+   mv "#{TMP_CHEF_SOLO_APPLY}" "#{@CHEF_SOLO_APPLY}" &&
+   chmod u+x "#{@CHEF_SOLO_APPLY}" &&
+   ln -s "#{@CHEF_SOLO_APPLY.basename}" "#{@CHEF_SOLO_APPLY_ALIAS}" &&
+   rm "#{@VAR_POCKETKNIFE_TARBALL}" &&
+   mv * "#{@VAR_POCKETKNIFE}"
        HERE
  
        self.say("Finished uploading!", false)
