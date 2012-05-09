@@ -1,6 +1,7 @@
 # Standard libraries
 require "pathname"
 require "fileutils"
+require "yaml"
 
 # Gem libraries
 require "archive/tar/minitar"
@@ -85,9 +86,18 @@ OPTIONS:
         pocketknife.sudoName = name
       end
 
-      parser.on("-u", "--user USER", "Run under non-root users and will not try to sudo. The user needs to have sufficient amount of right to do what it needs carrying out") do |name|
+      parser.on("-U", "--user USER", "Run under non-root users and will not try to sudo. The user needs to have sufficient amount of right to do what it needs carrying out") do |name|
         options[:user] = true
         pocketknife.user = name
+      end
+      
+      parser.on("-p", "--password PASSWORD_FILE", "file that contains the password of the user (An alternative to using a key).") do |file|
+        options[:password] = true
+    	raise OptionParser::MissingArgument, "password requires a user" unless pocketknife.user
+        hash = YAML.load(File.read(file))
+        password = hash[pocketknife.user]
+        raise OptionParser::InvalidArgument, "#{file} does not have an entry for user #{pocketknife.user}." unless password
+        pocketknife.password = password
       end
       
       parser.on("-k", "--sshkey SSHKEY", "Use an ssh key") do |name|
@@ -110,11 +120,27 @@ OPTIONS:
       parser.on("-I", "--noinstall", "Don't install Chef automatically") do |v|
         pocketknife.can_install = false
       end
+      
+      parser.on("-A", "--action ACTION", "Action to carry out") do |name|
+        options[:action] = true
+        pocketknife.actionName = name
+      end
+
+      parser.on("-D", "--action-dry-run ACTION", "Action to apply carry out") do |name|
+        options[:action] = true
+        pocketknife.actionName = name
+        pocketknife.dry_run = true
+      end
 
       begin
         arguments = parser.parse!
         puts "arguments=#{arguments} options=#{options}"
       rescue OptionParser::MissingArgument => e
+        puts parser
+        puts
+        puts "ERROR: #{e}"
+        exit -1
+      rescue OptionParser::InvalidArgument => e
         puts parser
         puts
         puts "ERROR: #{e}"
@@ -132,6 +158,11 @@ OPTIONS:
 
       begin
       	puts "options=#{options}"
+        if options[:action]
+          puts "action #{pocketknife.actionName}"
+          pocketknife.action(nodes)
+        end
+        
         if options[:upload]
           puts "upload"
           pocketknife.upload(nodes)
@@ -142,10 +173,11 @@ OPTIONS:
           pocketknife.apply(nodes)
         end
 
-        if not options[:upload] and not options[:apply]
+        if not options[:upload] and not options[:apply] and not pocketknife.dry_run
           puts "deploy"
           pocketknife.deploy(nodes)
         end
+
       rescue NodeError => e
         puts "! #{e.node}: #{e}"
         exit -1
@@ -171,6 +203,14 @@ OPTIONS:
   
   # user when not using root
   attr_accessor :user
+
+  # password when not using key
+  attr_accessor :password
+
+  # Action
+  attr_accessor :actionName
+  # Action
+  attr_accessor :dry_run
 
 
   # Can chef and its dependencies be installed automatically if not found? true means perform installation without prompting, false means quit if chef isn't available, and nil means prompt the user for input.
@@ -250,11 +290,9 @@ OPTIONS:
   def deploy(nodes)
     node_manager.assert_known(nodes)
 
-    #Node.prepare_upload do
-      for node in nodes
+    for node in nodes
         node_manager.find(node).deploy
-      end
-    #end
+    end
   end
 
   # Uploads configuration information to remote nodes.
@@ -263,11 +301,9 @@ OPTIONS:
   def upload(nodes)
     node_manager.assert_known(nodes)
 
-    #Node.prepare_upload do
       for node in nodes
         node_manager.find(node).upload
       end
-    #end
   end
 
   # Applies configurations to remote nodes.
@@ -280,4 +316,16 @@ OPTIONS:
       node_manager.find(node).apply
     end
   end
+  
+  # action configuration to the nodes.
+  #
+  # @params[Array<String>] nodes A list of node names.
+  def action(nodes)
+    node_manager.assert_known(nodes)
+
+    for node in nodes
+        node_manager.find(node).action
+    end
+  end
+
 end

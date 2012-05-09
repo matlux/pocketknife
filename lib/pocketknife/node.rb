@@ -1,3 +1,7 @@
+require 'json'
+require 'fileutils'
+include FileUtils
+
 class Pocketknife
   # == Node
   #
@@ -17,6 +21,24 @@ class Pocketknife
     
     @sudo = ""
 
+    def getWorkdir(doc,user)
+      suffix = ".chefwork"
+      
+      if doc and doc["pocketknife"] and doc["pocketknife"]["remoteTmpDir"]
+        remote = doc["pocketknife"]["remoteTmpDir"]
+        if remote[0,1]=="/"
+          return remote
+        else
+          suffix = remote
+        end
+      end
+      
+      workdir = "/home/#{@user}/#{suffix}" if user != "root"
+      workdir = "/root/#{suffix}" if user == "root"
+      return workdir
+    end
+
+
     # Initialize a new node.
     #
     # @param [String] name A node name.
@@ -32,7 +54,16 @@ class Pocketknife
       end   
       self.connection_cache = nil
       @user = self.pocketknife.user
-      @working_dir = Pathname.new("/tmp/chefwork")
+      
+      pocketknifeConf = 'pocketknife.json'
+      if File.file?(pocketknifeConf)
+        json = File.read(pocketknifeConf) 
+        puts "#{json}"
+        doc = JSON.parse(json)
+      end
+      workdir = getWorkdir(doc,@user)
+    
+      @working_dir = Pathname.new("#{workdir}")
       
       puts "@working_dir=#{@working_dir}"
           # Remote path to Chef's settings
@@ -100,16 +131,23 @@ chef-solo -j #{@NODE_JSON} "$@"
           #rye = Rye::Box.new(self.name, :user => "root")
           puts "Connecting to.... #{self.name}"
           user = "root"
-          if self.pocketknife.user != nil and self.pocketknife.user != ""
+          if self.pocketknife.user and self.pocketknife.user != ""
              user = self.pocketknife.user
+          end
+          options = {:user => user }
+          if self.pocketknife.password
+             puts "Connecting to.... #{self.name} as user #{user} with password file"
+             options[:password] = self.pocketknife.password
           end
           if self.pocketknife.ssh_key != nil and self.pocketknife.ssh_key != ""
              puts "Connecting to.... #{self.name} as user #{user} with ssh key"
-             rye = Rye::Box.new(self.name, {:user => user, :keys => self.pocketknife.ssh_key })
-          else
-             puts "Connecting to.... #{self.name} as user #{user}"
-             rye = Rye::Box.new(self.name, {:user => user })
+             options[:keys] = self.pocketknife.ssh_key
           end
+          if options.size == 1
+             puts "Connecting to.... #{self.name} as user #{user}"
+             
+          end
+          rye = Rye::Box.new(self.name, options)
           rye.disable_safe_mode
           rye
         end
@@ -299,11 +337,11 @@ chef-solo -j #{@NODE_JSON} "$@"
            system "#{ENV['EC2DREAM_HOME']}/tar/tar.exe cvf #{TMP_TARBALL.to_s} #{VAR_POCKETKNIFE_COOKBOOKS.basename.to_s} #{VAR_POCKETKNIFE_SITE_COOKBOOKS.basename.to_s} #{VAR_POCKETKNIFE_ROLES.basename.to_s} #{TMP_SOLO_RB.to_s} #{TMP_CHEF_SOLO_APPLY.to_s}" 
         else
            puts("TMP_TARBALL=#{TMP_TARBALL} contains following files:")
-           puts("VAR_POCKETKNIFE_COOKBOOKS=#{VAR_POCKETKNIFE_COOKBOOKS}")
-           puts("VAR_POCKETKNIFE_SITE_COOKBOOKS=#{VAR_POCKETKNIFE_SITE_COOKBOOKS}")
-           puts("VAR_POCKETKNIFE_ROLES=#{VAR_POCKETKNIFE_ROLES}")
+           puts("@VAR_POCKETKNIFE_COOKBOOKS=#{@VAR_POCKETKNIFE_COOKBOOKS}")
+           puts("@VAR_POCKETKNIFE_SITE_COOKBOOKS=#{@VAR_POCKETKNIFE_SITE_COOKBOOKS}")
+           puts("@VAR_POCKETKNIFE_ROLES=#{@VAR_POCKETKNIFE_ROLES}")
            puts("TMP_SOLO_RB=#{TMP_SOLO_RB}")
-           puts("VAR_POCKETKNIFE_CACHE=#{VAR_POCKETKNIFE_CACHE}")
+           puts("@VAR_POCKETKNIFE_CACHE=#{@VAR_POCKETKNIFE_CACHE}")
         
            TMP_TARBALL.open("w") do |handle|
              Archive::Tar::Minitar.pack(
@@ -439,6 +477,30 @@ chef-solo -j #{@NODE_JSON} "$@"
       puts "Deploys the configuration to the node, which calls {#upload} and {#apply}."
       prepare_upload {upload}
       self.apply
+    end
+    
+    # Action the configuration to the node.
+    def action
+      #action = 
+      puts "Action #{self.pocketknife.actionName} the configuration to the node #{name}.json."
+      
+      if File.directory?('nodes') and not File.directory?('nodetemplates')
+        cp_r "nodes", "nodetemplates"
+      end
+      
+      json = File.read('nodetemplates/' + name + '.json')
+      puts "#{json}"
+      doc = JSON.parse(json)
+      newdoc = doc.dup
+      newdoc["run_list"] = doc["run_list"].reject {|elt| elt =~ /role\[action-.*/ } + ["role[action-" + self.pocketknife.actionName + "]"]
+      newjson = JSON.generate(newdoc)
+      self.say("#{newjson}")
+      
+      # Create a new file and write to it  
+      File.open('nodes/' + name + '.json', 'w') do |f2|  
+        # use "\n" for two lines of text  
+        f2.puts newjson  
+      end  
     end
 
     # Executes commands on the external node.
