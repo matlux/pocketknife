@@ -19,10 +19,11 @@ class Pocketknife
     # Hash with information about platform, cached by {#platform}.
     attr_accessor :platform_cache
     
-    @sudo = ""
+    @cmdpre = nil
 
-    def getWorkdir(doc,user)
+    def getWorkdir(doc,user,sudoUser)
       suffix = ".chefwork"
+      prefix = ""
       
       if doc and doc["pocketknife"] and doc["pocketknife"]["remoteTmpDir"]
         remote = doc["pocketknife"]["remoteTmpDir"]
@@ -32,9 +33,18 @@ class Pocketknife
           suffix = remote
         end
       end
-      
-      workdir = "/home/#{@user}/#{suffix}" if user != "root"
-      workdir = "/root/#{suffix}" if user == "root"
+
+      if user != "root"
+        prefix = "/home"
+      end
+
+      effectiveUser = pocketknife.sudoName ? pocketknife.sudoName : user
+
+      #workdir = "/home/#{effectiveUser}/#{suffix}" if user != "root"
+      #workdir = "/root/#{suffix}" if user == "root"
+
+      workdir = "#{prefix}/#{effectiveUser}/#{suffix}"
+
       return workdir
     end
 
@@ -47,13 +57,16 @@ class Pocketknife
       self.name = name
       self.pocketknife = pocketknife
       if pocketknife.sudoName
-         @sudo = "sudo -u #{pocketknife.sudoName} "
+         @cmdpre = "sudo -u #{pocketknife.sudoName} "
+         @cmdpre = "echo '"
+         @cmdpost = "' | sudo su - #{pocketknife.sudoName}"
       end   
       if pocketknife.sudoName == "root"
-         @sudo = "sudo "
+         @cmdpre = "sudo "
       end   
       self.connection_cache = nil
       @user = self.pocketknife.user
+      @sudoUser = self.pocketknife.sudoName
       
       pocketknifeConf = 'pocketknife.json'
       if File.file?(pocketknifeConf)
@@ -61,7 +74,7 @@ class Pocketknife
         puts "#{json}"
         doc = JSON.parse(json)
       end
-      workdir = getWorkdir(doc,@user)
+      workdir = getWorkdir(doc,@user,pocketknife.sudoName)
     
       @working_dir = Pathname.new("#{workdir}")
       
@@ -255,13 +268,13 @@ chef-solo -j #{@NODE_JSON} "$@"
     # Installs Chef on the remote node.
     def install_chef
       self.say("Installing chef...")
-      self.execute("#{@sudo} gem install --no-rdoc --no-ri chef", true)
+      self.execute("gem install --no-rdoc --no-ri chef", true)
       self.say("Installed chef", false)
     end
 
     # Installs Rubygems on the remote node.
    def install_rubygems
-     if @sudo != nil and @sudo != ""
+     if @cmdpre != nil and @cmdpre != ""
        install_rubygems_sudo
      else      
       self.say("Installing rubygems...")
@@ -281,14 +294,14 @@ chef-solo -j #{@NODE_JSON} "$@"
 
     def install_rubygems_sudo
       self.say("Installing rubygems sudo...")
-      self.execute(<<-HERE, true)
-  #{@sudo}rm -rf rubygems-1.3.7 rubygems-1.3.7.tgz &&
-  #{@sudo}wget http://production.cf.rubygems.org/rubygems/rubygems-1.3.7.tgz &&
-  #{@sudo}tar zxf rubygems-1.3.7.tgz &&
-  #{@sudo}chmod -R a+rwX rubygems-1.3.7 &&
+      self.execute_with_prefix(<<-HERE,@cmdpre,@cmdpost, true)
+  rm -rf rubygems-1.3.7 rubygems-1.3.7.tgz &&
+  wget http://production.cf.rubygems.org/rubygems/rubygems-1.3.7.tgz &&
+  tar zxf rubygems-1.3.7.tgz &&
+  chmod -R a+rwX rubygems-1.3.7 &&
   cd rubygems-1.3.7 &&
-  #{@sudo}ruby setup.rb --no-format-executable &&
-  #{@sudo}rm -rf rubygems-1.3.7 rubygems-1.3.7.tgz
+  ruby setup.rb --no-format-executable &&
+  rm -rf rubygems-1.3.7 rubygems-1.3.7.tgz
       HERE
       self.say("Installed rubygems", false)
     end
@@ -386,7 +399,7 @@ chef-solo -j #{@NODE_JSON} "$@"
    #
    # IMPORTANT: You must first call {prepare_upload} to create the shared files that will be uploaded.
    def upload
-     if @sudo != nil and @sudo != ""
+     if @cmdpre != nil and @cmdpre != ""
        upload_sudo
      else   
        self.say("Uploading configuration...")
@@ -426,13 +439,17 @@ chef-solo -j #{@NODE_JSON} "$@"
       self.say("Uploading configuration using sudo...")
 
       self.say("Removing old files...", false)
+      self.execute_with_prefix <<-HERE
+   find "#{@working_dir}" -user "#{@sudoUser}" | xargs chmod -R a+rwX
+      HERE
+
       self.execute <<-HERE
-   umask 0377 &&
-  #{@sudo}rm -rf "#{@ETC_CHEF}" "#{@VAR_POCKETKNIFE}" "#{@VAR_POCKETKNIFE_CACHE}" "#{@CHEF_SOLO_APPLY}" "#{@CHEF_SOLO_APPLY_ALIAS}" &&
-  #{@sudo}mkdir -p "#{@ETC_CHEF}" "#{@VAR_POCKETKNIFE}" "#{@VAR_POCKETKNIFE_CACHE}" "#{@CHEF_SOLO_APPLY.dirname}" &&
-  #{@sudo}chmod -R a+rwX "#{@ETC_CHEF}" &&
-  #{@sudo}chmod -R a+rwX "#{@VAR_POCKETKNIFE}" &&
-  #{@sudo}chmod -R a+rwX "#{@VAR_POCKETKNIFE_CACHE}"
+   umask 0002 &&
+  rm -rf "#{@working_dir}" &&
+  mkdir -p "#{@ETC_CHEF}" "#{@VAR_POCKETKNIFE}" "#{@VAR_POCKETKNIFE_CACHE}" "#{@CHEF_SOLO_APPLY.dirname}" &&
+  chmod -R a+rwX "#{@ETC_CHEF}" &&
+  chmod -R a+rwX "#{@VAR_POCKETKNIFE}" &&
+  chmod -R a+rwX "#{@VAR_POCKETKNIFE_CACHE}"
   HERE
 
       self.say("Uploading new files... from #{self.local_node_json_pathname.to_s} to #{@NODE_JSON.to_s}", false)
@@ -443,14 +460,16 @@ chef-solo -j #{@NODE_JSON} "$@"
       self.say("Installing new files...", false)
       self.execute <<-HERE, true
   cd "#{@VAR_POCKETKNIFE_CACHE}" &&
-  #{@sudo}tar xvf "#{@VAR_POCKETKNIFE_TARBALL}" &&
-  #{@sudo}chmod -R a+rwX "#{@VAR_POCKETKNIFE_CACHE}"  &&
-  #{@sudo}mv "#{TMP_SOLO_RB}" "#{@SOLO_RB}" &&
-  #{@sudo}mv "#{TMP_CHEF_SOLO_APPLY}" "#{@CHEF_SOLO_APPLY}" &&
-  #{@sudo}chmod u+x "#{@CHEF_SOLO_APPLY}" &&
-  #{@sudo}ln -s "#{@CHEF_SOLO_APPLY.basename}" "#{@CHEF_SOLO_APPLY_ALIAS}" &&
-  #{@sudo}rm "#{@VAR_POCKETKNIFE_TARBALL}" &&
-  #{@sudo}mv * "#{@VAR_POCKETKNIFE}"
+  tar xvf "#{@VAR_POCKETKNIFE_TARBALL}" &&
+  chmod -R a+rwX "#{@VAR_POCKETKNIFE_CACHE}"  &&
+  chmod -R a+rwX "#{@NODE_JSON}"  &&
+  mv "#{TMP_SOLO_RB}" "#{@SOLO_RB}" &&
+  mv "#{TMP_CHEF_SOLO_APPLY}" "#{@CHEF_SOLO_APPLY}" &&
+  chmod u+x "#{@CHEF_SOLO_APPLY}" &&
+  ln -s "#{@CHEF_SOLO_APPLY.basename}" "#{@CHEF_SOLO_APPLY_ALIAS}" &&
+  rm "#{@VAR_POCKETKNIFE_TARBALL}" &&
+  mv * "#{@VAR_POCKETKNIFE}" &&
+  chmod -R a+rwX "#{@working_dir}/var"
       HERE
 
       self.say("Finished uploading!", false)
@@ -465,9 +484,9 @@ chef-solo -j #{@NODE_JSON} "$@"
       self.install
 
       self.say("Applying configuration...", true)
-      command = "#{@sudo}chef-solo -j #{@NODE_JSON} -c #{@SOLO_RB}"
+      command = "chef-solo -j #{@NODE_JSON} -c #{@SOLO_RB}"
       command << " -l debug" if self.pocketknife.verbosity == true
-      self.execute(command, true)
+      self.execute_with_prefix(command,@cmdpre,@cmdpost, true)
       self.say("Finished applying!")
     end
 
@@ -509,11 +528,21 @@ chef-solo -j #{@NODE_JSON} "$@"
     # @return [Rye::Rap] A result object describing the completed execution.
     # @raise [ExecutionError] Raised if something goes wrong with execution.
     def execute(commands, immediate=false)
+      execute_with_prefix(commands, nil, nil, immediate)
+    end
+
+    # Executes commands on the external node.
+    #
+    # @param [String] commands Shell commands to execute.
+    # @param [Boolean] immediate Display execution information immediately to STDOUT, rather than returning it as an object when done.
+    # @return [Rye::Rap] A result object describing the completed execution.
+    # @raise [ExecutionError] Raised if something goes wrong with execution.
+    def execute_with_prefix(commands, cmdpre=@cmdpre, cmdpost=@cmdpost, immediate=false)
       self.say("Executing:\n#{commands}", false)
       if immediate
         self.connection.stdout_hook {|line| puts line}
       end
-      return self.connection.execute("(#{commands}) 2>&1")
+      return self.connection.execute("(#{cmdpre}#{commands}#{cmdpost}) 2>&1")
     rescue Rye::Err => e
       raise Pocketknife::ExecutionError.new(self.name, commands, e, immediate)
     ensure
