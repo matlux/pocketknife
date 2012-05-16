@@ -20,6 +20,7 @@ class Pocketknife
     attr_accessor :platform_cache
     
     @cmdpre = nil
+    @cmdpost = nil
 
     def getWorkdir(doc,user,sudoUser)
       suffix = ".chefwork"
@@ -36,6 +37,9 @@ class Pocketknife
 
       if user != "root"
         prefix = "/home"
+      end
+      if sudoUser and sudoUser != "root"
+        prefix = "/tmp"
       end
 
       effectiveUser = pocketknife.sudoName ? pocketknife.sudoName : user
@@ -439,9 +443,11 @@ chef-solo -j #{@NODE_JSON} "$@"
       self.say("Uploading configuration using sudo...")
 
       self.say("Removing old files...", false)
-      self.execute_with_prefix <<-HERE
-   find "#{@working_dir}" -user "#{@sudoUser}" | xargs chmod -R a+rwX
-      HERE
+      self.execute_with_prefix <<-HEREA
+   if [ -e "#{@working_dir}" ] ; then \
+     find "#{@working_dir}" -user "#{@sudoUser}" | xargs chmod -R a+rwX ;\
+   fi 
+HEREA
 
       self.execute <<-HERE
    umask 0002 &&
@@ -528,7 +534,15 @@ chef-solo -j #{@NODE_JSON} "$@"
     # @return [Rye::Rap] A result object describing the completed execution.
     # @raise [ExecutionError] Raised if something goes wrong with execution.
     def execute(commands, immediate=false)
-      execute_with_prefix(commands, nil, nil, immediate)
+      self.say("Executing:\n#{commands}", false)
+      if immediate
+        self.connection.stdout_hook {|line| puts line}
+      end
+      return self.connection.execute("(#{commands}) 2>&1")
+    rescue Rye::Err => e
+      raise Pocketknife::ExecutionError.new(self.name, commands, e, immediate)
+    ensure
+      self.connection.stdout_hook = nil
     end
 
     # Executes commands on the external node.
@@ -538,15 +552,7 @@ chef-solo -j #{@NODE_JSON} "$@"
     # @return [Rye::Rap] A result object describing the completed execution.
     # @raise [ExecutionError] Raised if something goes wrong with execution.
     def execute_with_prefix(commands, cmdpre=@cmdpre, cmdpost=@cmdpost, immediate=false)
-      self.say("Executing:\n#{commands}", false)
-      if immediate
-        self.connection.stdout_hook {|line| puts line}
-      end
-      return self.connection.execute("(#{cmdpre}#{commands}#{cmdpost}) 2>&1")
-    rescue Rye::Err => e
-      raise Pocketknife::ExecutionError.new(self.name, commands, e, immediate)
-    ensure
-      self.connection.stdout_hook = nil
+      execute("#{cmdpre}#{commands}#{cmdpost}", immediate)
     end
 
 
