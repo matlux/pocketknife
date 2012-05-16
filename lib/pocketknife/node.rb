@@ -42,7 +42,7 @@ class Pocketknife
         prefix = "/tmp"
       end
 
-      effectiveUser = pocketknife.sudoName ? pocketknife.sudoName : user
+      effectiveUser = user
 
       #workdir = "/home/#{effectiveUser}/#{suffix}" if user != "root"
       #workdir = "/root/#{suffix}" if user == "root"
@@ -445,7 +445,11 @@ chef-solo -j #{@NODE_JSON} "$@"
       self.say("Removing old files...", false)
       self.execute_with_prefix <<-HEREA
    if [ -e "#{@working_dir}" ] ; then \
-     find "#{@working_dir}" -user "#{@sudoUser}" | xargs chmod -R a+rwX ;\
+     files=`find "#{@working_dir}" -user "#{@sudoUser}"` ;\
+     nb=`echo $files | wc -m`; \
+     if [ $nb != 1 ] ;then \
+       chmod -R a+rwX $files;\
+     fi ;\
    fi 
 HEREA
 
