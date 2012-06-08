@@ -191,7 +191,7 @@ chef-solo -j #{@NODE_JSON} "$@"
     # @return [Boolean] Has executable?
     def has_executable?(executable)
       begin
-        self.connection.execute(%{which "#{executable}" && test -x `which "#{executable}"`})
+        self.execute_with_prefix(%{which "#{executable}" && test -x `which "#{executable}"`})
         return true
       rescue Rye::Err
         return false
